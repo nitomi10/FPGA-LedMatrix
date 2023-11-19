@@ -1,0 +1,47 @@
+module bitSenderTest;
+
+	// Inputs
+	reg clk;
+	reg en;
+	reg reset;
+	reg wr;
+	reg in;
+
+	// Outputs
+	wire sent;
+	wire out;
+
+	// Instantiate the Unit Under Test (UUT)
+	bitSender uut (
+		.clk(clk), 
+		.en(en), 
+		.reset(reset), 
+		.wr(wr), 
+		.in(in), 
+		.sent(sent), 
+		.out(out)
+	);
+
+	initial begin
+		// Initialize Inputs
+		clk = 0;
+		en = 1;
+		reset = 0;
+		wr = 0;
+		in = 0;
+
+		#100;
+      in = 1;
+		wr = 1;
+		#100;
+		wr = 0;
+		// Add stimulus here
+
+	end
+	always begin
+		#10
+		clk <= ~clk;
+	end
+      
+endmodule
+

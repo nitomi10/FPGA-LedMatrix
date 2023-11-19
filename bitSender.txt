@@ -1,0 +1,91 @@
+module bitSender(
+	input clk,
+	input en,
+	input reset,
+	input wr,
+	input in,
+	output reg sent,
+	output reg out
+   );
+localparam [1:0] idle = 2'b00;
+localparam [1:0] sending = 2'b01;
+localparam [1:0] done = 2'b10;
+
+reg [1:0]state = idle;
+//reg send; 
+reg [5:0]highCounter = 0;
+reg [5:0]lowCounter = 0;
+
+always @(posedge clk)begin
+	if(en)begin
+		if(reset)begin
+			highCounter <= 0;
+			lowCounter <= 0;
+			out <=0;
+			sent <= 0;
+		end 
+		else begin
+			case(state)
+				idle:begin
+					//send <= in;
+					sent <= 0;
+					out <= 0;
+					highCounter <= 0;
+					lowCounter <= 0;
+					if(wr == 1)
+						state <= sending;
+				end
+				sending:begin
+					if(in == 1)begin
+						if(highCounter < 40)begin
+							out <= 1;
+							sent <= 0;
+							highCounter <= highCounter + 1;
+						end
+						else begin
+							if(lowCounter < 22)begin
+								lowCounter <= lowCounter + 1;
+								out <= 0;
+								sent <= 0;
+							end
+							else 
+								state <= done;
+						end
+					end
+					else begin
+						if(highCounter < 20)begin
+							out <= 1;
+							sent <= 0;
+							highCounter <= highCounter + 1;
+						end
+						else begin
+							if(lowCounter < 42)begin
+								lowCounter <= lowCounter + 1;
+								out <= 0;
+								sent <= 0;
+							end
+							else 
+								state <= done;
+						end
+					end
+				end
+				done:begin
+					sent <= 1;
+					out <= 0;
+					state <= idle;
+				end
+				default:
+					state <= idle;
+			endcase
+		end
+					
+			
+		
+	end
+	else begin
+		out<= 0;
+		sent <= 0;
+	end
+end
+
+endmodule
