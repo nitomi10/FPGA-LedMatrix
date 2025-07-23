@@ -7,10 +7,9 @@ entity MemManager is
     port (
         clk      : in  std_logic;
         en       : in  std_logic;                      
-        rst      : in  std_logic;                      
-        addr_in  : in  std_logic_vector(20 downto 0);  
-        data_in  : in  std_logic_vector(15 downto 0);
-        data_out : out std_logic_vector(15 downto 0);
+        rst      : in  std_logic;
+        data_in  : in  std_logic_vector (16 downto 0);                      
+        data_out : out std_logic_vector(31 downto 0);
         read_addr: out std_logic_vector(22 downto 0);
         CE       : out std_logic;
         OE       : out std_logic;
@@ -40,8 +39,40 @@ architecture Behavioral of MemManager is
   signal read_cntr : std_logic_vector (1 downto 0) := (others => '0');
   signal picture_cntr : std_logic_vector (31 downto 0) := (others => '0');
 
+  signal px_out : std_logic_vector (31 downto 0);
+  
+  component MemReader is 
+    port (
+        clk      : in  std_logic;                      
+        rst      : in  std_logic;                      
+        addr_in  : in  std_logic_vector(20 downto 0);  
+        data_in  : in  std_logic_vector(15 downto 0);
+        read_en  : in  std_logic; 
+        data_out : out std_logic_vector(15 downto 0);
+        read_addr: out std_logic_vector(23 downto 0);
+        CE       : out std_logic;
+        OE       : out std_logic;
+        WE       : out std_logic;
+        rdy      : out std_logic                     
+    );
+  end component;
 begin
   
+  mr : MemReader port map(
+    clk => clk,
+    rst => rst,
+    addr_in => address_reg,
+    data_in => data_in,
+    read_en => read_en,
+    data_out => read_output,
+    read_addr => read_addr,
+    CE => CE,
+    OE => OE,
+    WE => WE,
+    rdy => rdy
+  );
+
+
   FSM: process(clk, rst)
   begin
     if (rst = '1') then
@@ -75,9 +106,8 @@ begin
             px(16 + unsigned(read_cntr)*15 downto 0 + unsigned(read_cntr)*15) <= read_output;
 
             read_cntr <= std_logic_vector(unsigned(read_cntr) + 1);
-
+            address_reg <= std_logic_vector(unsigned(address_reg) + 1);
             if (unsigned(read_cntr) >= 2) then
-              address_reg <= std_logic_vector(unsigned(address_reg) + 1);
               read_cntr <= (others => '0');
               picture_array(unsigned(px_cntr)) = px;
               px_cntr <= std_logic_vector(unsigned(px_cntr) + 1);
