@@ -19,28 +19,32 @@ entity MemManager is
 end MemManager;
 
 architecture Behavioral of MemManager is
-  type state_type is (IDLE, STAT_READ, PICTURE_READ, NEXT_PICTURE);
+  type state_type is (IDLE, STAT_READ, PICTURE_READ, READ_WAIT);
   signal state : state_type := IDLE;
   
+  type out_state_type is (WAITING, OUTPUTING);
+  signal out_state : out_state_type := WAITING;
+
   signal read_en : std_logic := '0';
   signal read_rdy : std_logic;
   signal video_len : std_logic_vector (31 downto 0);
   signal video_len_cntr : std_logic_vector (2 downto 0) := (others => '0');
   signal address_reg : std_logic_vector (20 downto 0);
   signal read_output : std_logic_vector (15 downto 0);
-  
-  type array_Picture is array (0 to 255) of std_logic_vector (31 downto 0);
-  signal picture_array : array_Picture;
-  signal out_array : array_Picture;
-  
-  signal picture_rdy : std_logic := '0';
+    
   signal px_cntr : std_logic_vector (7 downto 0);
-  signal px : std_logic_vector (31 downto 0);
-  signal read_cntr : std_logic_vector (1 downto 0) := (others => '0');
+  signal read_cntr : std_logic_vector (2 downto 0) := (others => '0');
   signal picture_cntr : std_logic_vector (31 downto 0) := (others => '0');
+  signal read_wait_cntr: std_logic_vector (2 downto 0) := (others => '0');
+  signal output_cntr: std_logic_vector (2 downto 0) := (others => '0');
 
-  signal px_out : std_logic_vector (31 downto 0);
   
+  signal px : std_logic_vector (31 downto 0);
+  signal px_buffer    : std_logic_vector (31 downto 0);
+  signal px_out    : std_logic_vector (31 downto 0);
+  signal px_rdy : std_logic := '0';
+  
+
   component MemReader is 
     port (
         clk      : in  std_logic;                      
@@ -69,11 +73,11 @@ begin
     CE => CE,
     OE => OE,
     WE => WE,
-    rdy => rdy
+    rdy => read_rdy
   );
 
 
-  FSM: process(clk, rst)
+  READ_FSM: process(clk, rst)
   begin
     if (rst = '1') then
       CE <= '1';OE <= '1';
@@ -93,6 +97,7 @@ begin
               video_len(15 downto 0) <= read_output;
             elsif (unsigned(video_len_cntr) = 1) then
               video_len(31 downto 16)<= read_output;
+            elsif (unsigned(video_len_cntr) >= 7) then
               state <= PICTURE_READ;
               address_reg <= std_logic_vector(unsigned(address_reg) + 1);
             end if;
@@ -102,35 +107,68 @@ begin
         when PICTURE_READ =>
           read_en <= '1';
           if (read_rdy = '1') then
+            state <= READ_WAIT;
 
-            px(16 + unsigned(read_cntr)*15 downto 0 + unsigned(read_cntr)*15) <= read_output;
-
-            read_cntr <= std_logic_vector(unsigned(read_cntr) + 1);
-            address_reg <= std_logic_vector(unsigned(address_reg) + 1);
-            if (unsigned(read_cntr) >= 2) then
-              read_cntr <= (others => '0');
-              picture_array(unsigned(px_cntr)) = px;
-              px_cntr <= std_logic_vector(unsigned(px_cntr) + 1);
-              if (unsigned(px_cntr) = 255) then
-                px_cntr <= (others => '0');
+            if(unsigned(read_cntr) mod 2 = 0) then
+              px(31  downto 16 ) <= read_output;
+            else then
+              px(16  downto 0 ) <= read_output;
+              px_buffer <= px;
+              px_ready <= '1';
+              if (px(7) = '1') then
                 picture_cntr <= std_logic_vector(unsigned(picture_cntr) + 1);
-                state <= NEXT_PICTURE;
-              end if;
+              end if;  
             end if;
+              
+            read_cntr <= std_logic_vector(unsigned(read_cntr) + 1);
+
           end if;
-        when NEXT_PICTURE => then
-          read_en <= '0';
-          picture_rdy <= '1';
-          out_array <= picture_array;
-          state <= PICTURE_READ;
-          if ( unsigned(picture_cntr) >= unsigned(video_len)) then
-            address_reg <= std_logic_vector(2);
+        when READ_WAIT =>
+          read_en <= '1';
+          if ( unsigned(read_wait_cntr) >= 3) then
+            state <= PICTURE_READ;
+            read_wait_cntr <= (others => '0');
           end if;
+          if (unsigned(read_cntr) >= 7) then
+              read_cntr <= (others => '0');
+              if(unsigned(picture_cntr) < unsigned(video_len)) then
+                address_reg <= std_logic_vector(unsigned(address_reg) + 1);
+              else
+                address_reg <= std_logic_vector(1);
+              end if;
+              
+          end if
+          read_wait_cntr <= std_logic_vector(unsigned(read_wait_cntr) + 1);
       end case;
     end if;
     
   end process;
   
+  OUT_FSM: process(clk, rst)
+  begin
+    if (rst = '1') then
+      CE <= '1';OE <= '1';
+    elsif (rising_edge(clk)) then 
+      case out_state is
+        when WAITING =>
+          if(px_ready = '1') then
+            px_ready <= '0';
+            px_out <= px_buffer;
+            out_state <= OUTPUTING;
+          end if;
+        when OUTPUTING =>
+          if(unsigned(output_cntr) = 1)then
+            rdy <= '1';
+          elsif (unsigned(output_cntr) >= 2) then
+            rdy <= '0';
+            output_cntr <= (others => '0');
+            out_state <= WAITING;
+          end if;
+          output_cntr <= std_logic_vector(unsigned(output_cntr) + 1);
+          
+      end case;
+    end if;
+  end process;
   
   
 end Behavioral;
